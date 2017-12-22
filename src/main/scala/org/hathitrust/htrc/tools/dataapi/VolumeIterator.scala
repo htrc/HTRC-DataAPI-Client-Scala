@@ -3,6 +3,7 @@ package org.hathitrust.htrc.tools.dataapi
 import java.util.zip.{ZipEntry, ZipInputStream}
 
 import org.hathitrust.htrc.textprocessing.runningheaders.Page
+import org.hathitrust.htrc.tools.dataapi.exceptions.ApiRequestException
 import org.hathitrust.htrc.tools.pairtreehelper.PairtreeHelper
 import org.hathitrust.htrc.tools.pairtreetotext.HTRCVolume
 
@@ -20,51 +21,37 @@ class VolumeIterator(zipStream: ZipInputStream)
   import VolumeIterator._
 
   private var nextEntry = Option(zipStream.getNextEntry)
-  private var currentCleanVolId = nextEntry.map(_.getName.takeWhile(_ != '/'))
 
   override def hasNext: Boolean = nextEntry.isDefined
 
   override def next(): HTRCVolume = nextEntry match {
     case Some(zipEntry) if !zipEntry.getName.equals("ERROR.err") =>
+      require(zipEntry.isDirectory)
+      val cleanId = zipEntry.getName.init
       val pages = Iterator
-        .continually(nextEntry)
-        .takeWhile(e => e.isDefined && e.get.getName.startsWith(currentCleanVolId.get + "/"))
+        .continually({
+          nextEntry = Option(zipStream.getNextEntry)
+          nextEntry
+        })
+        .takeWhile(e => e.isDefined && !e.get.isDirectory && !e.get.getName.equals("ERROR.err"))
         .map(_.get)
-        .withFilter { e =>
-          if (e.isDirectory) {
-            advance()
-            false
-          } else
-            true
-        }
-        .map(readPageAndAdvance)
+        .map(readPage)
         .toSeq
         .sortBy(_.pageSeq)
-
-      val cleanId = currentCleanVolId.get
-      currentCleanVolId = nextEntry.map(_.getName.takeWhile(_ != '/'))
 
       new HTRCVolume(PairtreeHelper.getDocFromCleanId(cleanId), pages)
 
     case Some(_) =>
       val error = Source.fromInputStream(zipStream).mkString
-      throw new Exception(error)
+      throw ApiRequestException(500, error)
 
     case None => throw new NoSuchElementException
   }
 
   def close(): Unit = zipStream.close()
 
-  private def readPageAndAdvance(entry: ZipEntry): Page = {
+  private def readPage(entry: ZipEntry): Page = {
     val pageSeqRegex(seq) = entry.getName
-    val page = Page(zipStream, seq)
-
-    advance()
-
-    page
-  }
-
-  private def advance(): Unit = {
-    nextEntry = Option(zipStream.getNextEntry)
+    Page(zipStream, seq)
   }
 }
