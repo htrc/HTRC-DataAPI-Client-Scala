@@ -1,7 +1,7 @@
 package org.hathitrust.htrc.tools.dataapi
 
 import java.net.{HttpURLConnection, URL, URLEncoder}
-import java.nio.file.{CopyOption, Files, StandardCopyOption}
+import java.nio.file.{Files, Paths, StandardCopyOption}
 import java.security.cert.X509Certificate
 import java.util.zip.ZipInputStream
 
@@ -18,17 +18,14 @@ import scala.util.Try
 
 object DataApiClient {
   private val logger: Logger = LoggerFactory.getLogger(getClass)
+  private val osTmpDir: String = System.getProperty("java.io.tmpdir")
 
   object Builder {
-
     sealed trait Options
 
     object Options {
-
       sealed trait DefaultOptions extends Options
-
       sealed trait UrlOption extends Options
-
       type RequiredOptions = DefaultOptions with UrlOption
     }
 
@@ -41,8 +38,7 @@ object DataApiClient {
                                             readTimeout: Int = 0,
                                             performSSLValidation: Boolean = true,
                                             followRedirects: Boolean = true,
-                                            cacheResponse: Boolean = false) {
-
+                                            useTempStorage: Option[String] = None) {
     import Builder.Options._
 
     def setApiUrl(url: String): Builder[Options with UrlOption] = {
@@ -53,7 +49,7 @@ object DataApiClient {
         readTimeout = readTimeout,
         performSSLValidation = performSSLValidation,
         followRedirects = followRedirects,
-        cacheResponse = cacheResponse
+        useTempStorage = useTempStorage
       )
     }
 
@@ -65,7 +61,7 @@ object DataApiClient {
         readTimeout = readTimeout,
         performSSLValidation = performSSLValidation,
         followRedirects = followRedirects,
-        cacheResponse = cacheResponse
+        useTempStorage = useTempStorage
       )
     }
 
@@ -77,7 +73,7 @@ object DataApiClient {
         readTimeout = readTimeout,
         performSSLValidation = performSSLValidation,
         followRedirects = followRedirects,
-        cacheResponse = cacheResponse
+        useTempStorage = useTempStorage
       )
     }
 
@@ -89,7 +85,7 @@ object DataApiClient {
         readTimeout = timeout,
         performSSLValidation = performSSLValidation,
         followRedirects = followRedirects,
-        cacheResponse = cacheResponse
+        useTempStorage = useTempStorage
       )
     }
 
@@ -101,7 +97,7 @@ object DataApiClient {
         readTimeout = readTimeout,
         performSSLValidation = false,
         followRedirects = followRedirects,
-        cacheResponse = cacheResponse
+        useTempStorage = useTempStorage
       )
 
     def disableFollowRedirects(): Builder[Options] =
@@ -112,10 +108,10 @@ object DataApiClient {
         readTimeout = readTimeout,
         performSSLValidation = performSSLValidation,
         followRedirects = false,
-        cacheResponse = cacheResponse
+        useTempStorage = useTempStorage
       )
 
-    def enableResponseCache(): Builder[Options] =
+    def setUseTempStorage(tmpDir: String = osTmpDir): Builder[Options] =
       new Builder(
         url = url,
         token = token,
@@ -123,7 +119,7 @@ object DataApiClient {
         readTimeout = readTimeout,
         performSSLValidation = performSSLValidation,
         followRedirects = followRedirects,
-        cacheResponse = true
+        useTempStorage = Some(tmpDir)
       )
 
     def build()(implicit ev: Options =:= RequiredOptions): DataApi =
@@ -134,7 +130,7 @@ object DataApiClient {
         readTimeout = readTimeout,
         performSSLValidation = performSSLValidation,
         followRedirects = followRedirects,
-        cacheResponse = cacheResponse
+        useTempStorage = useTempStorage
       )
   }
 
@@ -161,8 +157,7 @@ sealed class DataApiClient(baseUrl: String,
                            readTimeout: Int,
                            performSSLValidation: Boolean,
                            followRedirects: Boolean,
-                           cacheResponse: Boolean) extends DataApi {
-
+                           useTempStorage: Option[String]) extends DataApi {
   import DataApiClient._
 
   require(baseUrl != null && baseUrl.startsWith("http"), s"Invalid URL: $baseUrl")
@@ -206,21 +201,27 @@ sealed class DataApiClient(baseUrl: String,
     }
 
     conn.getResponseCode match {
-      case HttpURLConnection.HTTP_OK if cacheResponse =>
-        logger.debug("Caching the response...")
-        val tmpPath = Files.createTempFile(null, ".zip")
-        Files.copy(conn.getInputStream, tmpPath, StandardCopyOption.REPLACE_EXISTING)
-        conn.disconnect()
-        logger.debug("Response cached")
-        val stream = Files.newInputStream(tmpPath)
-        VolumeIterator(new ZipInputStream(stream), zs => {
-          zs.close()
-          Try(Files.delete(tmpPath)).recover {
-            case t => logger.error(s"Could not delete temp file: $tmpPath", t)
-          }
-        })
+      case HttpURLConnection.HTTP_OK =>
+        useTempStorage match {
+          case Some(tmpDir) =>
+            val tmpPath = Files.createTempFile(Paths.get(tmpDir), "dataapi", ".zip")
+            logger.debug(s"Saving response as $tmpPath...")
+            Files.copy(conn.getInputStream, tmpPath, StandardCopyOption.REPLACE_EXISTING)
+            conn.disconnect()
+            logger.debug(s"Response saved to $tmpPath")
+            val stream = Files.newInputStream(tmpPath)
+            VolumeIterator(new ZipInputStream(stream), zs => {
+              zs.close()
+              Try {
+                Files.delete(tmpPath)
+                logger.debug(s"Deleted temp response file: $tmpPath")
+              }.recover {
+                case t => logger.error(s"Could not delete temp response file: $tmpPath", t)
+              }
+            })
 
-      case HttpURLConnection.HTTP_OK => VolumeIterator(new ZipInputStream(conn.getInputStream))
+          case None => VolumeIterator(new ZipInputStream(conn.getInputStream))
+        }
 
       case errCode =>
         val message = Source.fromInputStream(conn.getErrorStream).mkString
