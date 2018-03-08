@@ -1,7 +1,7 @@
 package org.hathitrust.htrc.tools.dataapi
 
 import java.net.{HttpURLConnection, URL, URLEncoder}
-import java.nio.file.Files
+import java.nio.file.{CopyOption, Files, StandardCopyOption}
 import java.security.cert.X509Certificate
 import java.util.zip.ZipInputStream
 
@@ -209,7 +209,7 @@ sealed class DataApiClient(baseUrl: String,
       case HttpURLConnection.HTTP_OK if cacheResponse =>
         logger.debug("Caching the response...")
         val tmpPath = Files.createTempFile(null, ".zip")
-        Files.copy(conn.getInputStream, tmpPath)
+        Files.copy(conn.getInputStream, tmpPath, StandardCopyOption.REPLACE_EXISTING)
         conn.disconnect()
         logger.debug("Response cached")
         val stream = Files.newInputStream(tmpPath)
