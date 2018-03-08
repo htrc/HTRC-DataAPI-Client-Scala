@@ -205,12 +205,8 @@ sealed class DataApiClient(baseUrl: String,
         useTempStorage match {
           case Some(tmpDir) =>
             logger.debug("Saving response...")
-            val tmpPath = FileUtils.saveToTempFile(
-              conn.getInputStream,
-              "dataapi", ".zip",
-              tmpDir,
-              List(FileUtils.readOnlyAttributes(tmpDir))
-            ).get
+            val tmpPath = FileUtils.saveToTempFile(conn.getInputStream, "dataapi", ".zip",
+              tmpDir, FileUtils.restrictedOwnerOnlyAccess(tmpDir)).get
             conn.disconnect()
             logger.debug(s"Response saved to $tmpPath")
             val stream = Files.newInputStream(tmpPath)

@@ -25,21 +25,14 @@ object FileUtils {
     numRead
   }
 
-  def readOnlyAttributes(path: String): FileAttribute[_] =
-    readOnlyAttributes(Paths.get(path))
+  def restrictedOwnerOnlyAccess(path: String): List[FileAttribute[_]] =
+    restrictedOwnerOnlyAccess(Paths.get(path))
 
-  def readOnlyAttributes(path: Path): FileAttribute[_] = {
+  def restrictedOwnerOnlyAccess(path: Path): List[FileAttribute[_]] = {
     val fileStore = Files.getFileStore(path)
     if (fileStore.supportsFileAttributeView(classOf[PosixFileAttributeView]))
-      PosixFilePermissions.asFileAttribute(PosixFilePermissions.fromString("rw-------"))
-    else {
-      if (fileStore.supportsFileAttributeView(classOf[DosFileAttributeView]))
-        new FileAttribute[Boolean] {
-          override def name(): String = "dos:readonly"
-          override def value(): Boolean = true
-        }
-      else null
-    }
+      List(PosixFilePermissions.asFileAttribute(PosixFilePermissions.fromString("rw-------")))
+    else Nil
   }
 
   def saveToTempFile(is: InputStream,
