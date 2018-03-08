@@ -1,25 +1,32 @@
 package org.hathitrust.htrc.tools.dataapi
 
 import java.net.{HttpURLConnection, URL, URLEncoder}
+import java.nio.file.Files
 import java.security.cert.X509Certificate
 import java.util.zip.ZipInputStream
-import javax.net.ssl._
 
+import build.BuildInfo
+import javax.net.ssl._
 import org.hathitrust.htrc.tools.dataapi.DataApiClient.Builder.Options.DefaultOptions
 import org.hathitrust.htrc.tools.dataapi.exceptions.{ApiRequestException, UnsupportedProtocolException}
-import build.BuildInfo
-import utils.AutoCloseableResource._
+import org.hathitrust.htrc.tools.dataapi.utils.AutoCloseableResource._
+import org.slf4j.{Logger, LoggerFactory}
 
 import scala.concurrent.{ExecutionContext, Future}
 import scala.io.{Codec, Source}
+import scala.util.Try
 
 object DataApiClient {
+  private val logger: Logger = LoggerFactory.getLogger(getClass)
 
   object Builder {
+
     sealed trait Options
 
     object Options {
+
       sealed trait DefaultOptions extends Options
+
       sealed trait UrlOption extends Options
 
       type RequiredOptions = DefaultOptions with UrlOption
@@ -33,7 +40,9 @@ object DataApiClient {
                                             connectTimeout: Int = 0,
                                             readTimeout: Int = 0,
                                             performSSLValidation: Boolean = true,
-                                            followRedirects: Boolean = true) {
+                                            followRedirects: Boolean = true,
+                                            cacheResponse: Boolean = false) {
+
     import Builder.Options._
 
     def setApiUrl(url: String): Builder[Options with UrlOption] = {
@@ -43,7 +52,8 @@ object DataApiClient {
         connectTimeout = connectTimeout,
         readTimeout = readTimeout,
         performSSLValidation = performSSLValidation,
-        followRedirects = followRedirects
+        followRedirects = followRedirects,
+        cacheResponse = cacheResponse
       )
     }
 
@@ -54,7 +64,8 @@ object DataApiClient {
         connectTimeout = connectTimeout,
         readTimeout = readTimeout,
         performSSLValidation = performSSLValidation,
-        followRedirects = followRedirects
+        followRedirects = followRedirects,
+        cacheResponse = cacheResponse
       )
     }
 
@@ -65,7 +76,8 @@ object DataApiClient {
         connectTimeout = timeout,
         readTimeout = readTimeout,
         performSSLValidation = performSSLValidation,
-        followRedirects = followRedirects
+        followRedirects = followRedirects,
+        cacheResponse = cacheResponse
       )
     }
 
@@ -76,7 +88,8 @@ object DataApiClient {
         connectTimeout = connectTimeout,
         readTimeout = timeout,
         performSSLValidation = performSSLValidation,
-        followRedirects = followRedirects
+        followRedirects = followRedirects,
+        cacheResponse = cacheResponse
       )
     }
 
@@ -87,7 +100,8 @@ object DataApiClient {
         connectTimeout = connectTimeout,
         readTimeout = readTimeout,
         performSSLValidation = false,
-        followRedirects = followRedirects
+        followRedirects = followRedirects,
+        cacheResponse = cacheResponse
       )
 
     def disableFollowRedirects(): Builder[Options] =
@@ -97,7 +111,19 @@ object DataApiClient {
         connectTimeout = connectTimeout,
         readTimeout = readTimeout,
         performSSLValidation = performSSLValidation,
-        followRedirects = false
+        followRedirects = false,
+        cacheResponse = cacheResponse
+      )
+
+    def enableResponseCache(): Builder[Options] =
+      new Builder(
+        url = url,
+        token = token,
+        connectTimeout = connectTimeout,
+        readTimeout = readTimeout,
+        performSSLValidation = performSSLValidation,
+        followRedirects = followRedirects,
+        cacheResponse = true
       )
 
     def build()(implicit ev: Options =:= RequiredOptions): DataApi =
@@ -107,7 +133,8 @@ object DataApiClient {
         connectTimeout = connectTimeout,
         readTimeout = readTimeout,
         performSSLValidation = performSSLValidation,
-        followRedirects = followRedirects
+        followRedirects = followRedirects,
+        cacheResponse = cacheResponse
       )
   }
 
@@ -116,7 +143,9 @@ object DataApiClient {
   private lazy val insecureSocketFactory: SSLSocketFactory = {
     val noopTrustManager = Array[TrustManager](new X509TrustManager() {
       override def checkServerTrusted(x509Certificates: Array[X509Certificate], s: String): Unit = {}
+
       override def checkClientTrusted(x509Certificates: Array[X509Certificate], s: String): Unit = {}
+
       override def getAcceptedIssuers: Array[X509Certificate] = null
     })
 
@@ -131,7 +160,9 @@ sealed class DataApiClient(baseUrl: String,
                            connectTimeout: Int,
                            readTimeout: Int,
                            performSSLValidation: Boolean,
-                           followRedirects: Boolean) extends DataApi {
+                           followRedirects: Boolean,
+                           cacheResponse: Boolean) extends DataApi {
+
   import DataApiClient._
 
   require(baseUrl != null && baseUrl.startsWith("http"), s"Invalid URL: $baseUrl")
@@ -141,7 +172,7 @@ sealed class DataApiClient(baseUrl: String,
   private val apiUrl = new URL(s"$baseUrl/".replaceAll("//$", "/"))
 
   if (!performSSLValidation)
-    Console.err.println("WARN: Disabling SSL validation! This is HIGHLY insecure and should NEVER be used in production!")
+    logger.warn("Disabling SSL validation! This is HIGHLY insecure and should NEVER be used in production!")
 
   def retrieveVolumes(ids: TraversableOnce[String])
                      (implicit codec: Codec, executionContext: ExecutionContext): Future[VolumeIterator] = Future {
@@ -175,6 +206,20 @@ sealed class DataApiClient(baseUrl: String,
     }
 
     conn.getResponseCode match {
+      case HttpURLConnection.HTTP_OK if cacheResponse =>
+        logger.debug("Caching the response...")
+        val tmpPath = Files.createTempFile(null, ".zip")
+        Files.copy(conn.getInputStream, tmpPath)
+        conn.disconnect()
+        logger.debug("Response cached")
+        val stream = Files.newInputStream(tmpPath)
+        VolumeIterator(new ZipInputStream(stream), zs => {
+          zs.close()
+          Try(Files.delete(tmpPath)).recover {
+            case t => logger.error(s"Could not delete temp file: $tmpPath", t)
+          }
+        })
+
       case HttpURLConnection.HTTP_OK => VolumeIterator(new ZipInputStream(conn.getInputStream))
 
       case errCode =>
