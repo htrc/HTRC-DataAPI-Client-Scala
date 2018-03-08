@@ -1,7 +1,7 @@
 package org.hathitrust.htrc.tools.dataapi
 
 import java.net.{HttpURLConnection, URL, URLEncoder}
-import java.nio.file.{Files, Paths, StandardCopyOption}
+import java.nio.file._
 import java.security.cert.X509Certificate
 import java.util.zip.ZipInputStream
 
@@ -10,6 +10,7 @@ import javax.net.ssl._
 import org.hathitrust.htrc.tools.dataapi.DataApiClient.Builder.Options.DefaultOptions
 import org.hathitrust.htrc.tools.dataapi.exceptions.{ApiRequestException, UnsupportedProtocolException}
 import org.hathitrust.htrc.tools.dataapi.utils.AutoCloseableResource._
+import org.hathitrust.htrc.tools.dataapi.utils.FileUtils
 import org.slf4j.{Logger, LoggerFactory}
 
 import scala.concurrent.{ExecutionContext, Future}
@@ -18,7 +19,6 @@ import scala.util.Try
 
 object DataApiClient {
   private val logger: Logger = LoggerFactory.getLogger(getClass)
-  private val osTmpDir: String = System.getProperty("java.io.tmpdir")
 
   object Builder {
     sealed trait Options
@@ -111,7 +111,7 @@ object DataApiClient {
         useTempStorage = useTempStorage
       )
 
-    def setUseTempStorage(tmpDir: String = osTmpDir): Builder[Options] =
+    def setUseTempStorage(tmpDir: String = FileUtils.OSTmpDir): Builder[Options] =
       new Builder(
         url = url,
         token = token,
@@ -204,9 +204,13 @@ sealed class DataApiClient(baseUrl: String,
       case HttpURLConnection.HTTP_OK =>
         useTempStorage match {
           case Some(tmpDir) =>
-            val tmpPath = Files.createTempFile(Paths.get(tmpDir), "dataapi", ".zip")
-            logger.debug(s"Saving response as $tmpPath...")
-            Files.copy(conn.getInputStream, tmpPath, StandardCopyOption.REPLACE_EXISTING)
+            logger.debug("Saving response...")
+            val tmpPath = FileUtils.saveToTempFile(
+              conn.getInputStream,
+              "dataapi", ".zip",
+              tmpDir,
+              List(FileUtils.readOnlyAttributes(tmpDir))
+            ).get
             conn.disconnect()
             logger.debug(s"Response saved to $tmpPath")
             val stream = Files.newInputStream(tmpPath)
