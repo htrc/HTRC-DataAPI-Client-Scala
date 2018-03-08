@@ -14,9 +14,12 @@ object VolumeIterator {
 
   def apply(zs: ZipInputStream)(implicit codec: Codec): VolumeIterator =
     new VolumeIterator(zs)
+
+  def apply(zs: ZipInputStream, closeF: ZipInputStream => Unit)(implicit codec: Codec): VolumeIterator =
+    new VolumeIterator(zs, closeF)
 }
 
-class VolumeIterator(zipStream: ZipInputStream)
+class VolumeIterator(zipStream: ZipInputStream, closeF: ZipInputStream => Unit = _.close())
                     (implicit codec: Codec) extends Iterator[HTRCVolume] with AutoCloseable {
   import VolumeIterator._
 
@@ -48,7 +51,7 @@ class VolumeIterator(zipStream: ZipInputStream)
     case None => throw new NoSuchElementException
   }
 
-  def close(): Unit = zipStream.close()
+  def close(): Unit = closeF(zipStream)
 
   private def readPage(entry: ZipEntry): Page = {
     val pageSeqRegex(seq) = entry.getName

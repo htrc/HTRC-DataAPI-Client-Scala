@@ -54,7 +54,8 @@ lazy val `dataapi-client` = (project in file("."))
     licenses += "Apache2" -> url("http://www.apache.org/licenses/LICENSE-2.0"),
     libraryDependencies ++= Seq(
       "org.hathitrust.htrc"           %% "pairtree-to-text"       % "5.1.2",
-      "org.scalatest"                 %% "scalatest"              % "3.0.4"        % "test"
+      "ch.qos.logback"                %  "logback-classic"        % "1.2.3",
+      "org.scalatest"                 %% "scalatest"              % "3.0.5"        % "test"
     ),
     crossScalaVersions := Seq("2.11.12", "2.12.4")
   )
