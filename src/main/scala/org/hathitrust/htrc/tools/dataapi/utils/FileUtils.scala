@@ -12,6 +12,7 @@ object FileUtils {
   val OSTmpDir: String = System.getProperty("java.io.tmpdir")
   private val BUFFER_SIZE = 16384
 
+  @SuppressWarnings(Array("org.wartremover.warts.Var"))
   def copy(source: InputStream, sink: OutputStream): Try[Long] = Try {
     val buf = new Array[Byte](BUFFER_SIZE)
     var numRead = 0L
@@ -35,6 +36,7 @@ object FileUtils {
     else Nil
   }
 
+  @SuppressWarnings(Array("org.wartremover.warts.Null"))
   def saveToTempFile(is: InputStream,
                      prefix: String = null,
                      suffix: String = null,
