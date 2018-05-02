@@ -9,12 +9,12 @@ lazy val commonSettings = Seq(
   organization := "org.hathitrust.htrc",
   organizationName := "HathiTrust Research Center",
   organizationHomepage := Some(url("https://www.hathitrust.org/htrc")),
-  scalaVersion := "2.12.4",
+  scalaVersion := "2.12.6",
   scalacOptions ++= Seq(
     "-feature",
+    "-deprecation",
     "-language:postfixOps",
-    "-language:implicitConversions",
-    "-target:jvm-1.8"
+    "-language:implicitConversions"
   ),
   resolvers ++= Seq(
     "I3 Repository" at "http://nexus.htrc.illinois.edu/content/groups/public",
@@ -43,7 +43,11 @@ lazy val commonSettings = Seq(
     ("Git-Version", git.gitDescribedVersion.value.getOrElse("N/A")),
     ("Git-Dirty", git.gitUncommittedChanges.value.toString),
     ("Build-Date", new java.util.Date().toString)
-  )
+  ),
+  wartremoverErrors ++= Warts.unsafe.diff(Seq(
+    Wart.DefaultArguments,
+    Wart.NonUnitStatements
+  ))
 )
 
 lazy val `dataapi-client` = (project in file("."))
@@ -53,9 +57,10 @@ lazy val `dataapi-client` = (project in file("."))
     name := "dataapi-client",
     licenses += "Apache2" -> url("http://www.apache.org/licenses/LICENSE-2.0"),
     libraryDependencies ++= Seq(
-      "org.hathitrust.htrc"           %% "pairtree-to-text"       % "5.1.2",
-      "ch.qos.logback"                %  "logback-classic"        % "1.2.3",
-      "org.scalatest"                 %% "scalatest"              % "3.0.5"        % "test"
+      "org.hathitrust.htrc"           %% "data-model"           % "1.1",
+      "ch.qos.logback"                %  "logback-classic"      % "1.2.3",
+      "org.scalacheck"                %% "scalacheck"           % "1.14.0"      % Test,
+      "org.scalatest"                 %% "scalatest"            % "3.0.5"       % Test
     ),
-    crossScalaVersions := Seq("2.11.12", "2.12.4")
+    crossScalaVersions := Seq("2.11.12", "2.12.6")
   )

@@ -2,10 +2,8 @@ package org.hathitrust.htrc.tools.dataapi
 
 import java.util.zip.{ZipEntry, ZipInputStream}
 
-import org.hathitrust.htrc.textprocessing.runningheaders.Page
+import org.hathitrust.htrc.data.{HtrcPage, HtrcVolume, HtrcVolumeId}
 import org.hathitrust.htrc.tools.dataapi.exceptions.ApiRequestException
-import org.hathitrust.htrc.tools.pairtreehelper.PairtreeHelper
-import org.hathitrust.htrc.tools.pairtreetotext.HTRCVolume
 
 import scala.io.{Codec, Source}
 
@@ -20,14 +18,20 @@ object VolumeIterator {
 }
 
 class VolumeIterator(zipStream: ZipInputStream, closeF: ZipInputStream => Unit = _.close())
-                    (implicit codec: Codec) extends Iterator[HTRCVolume] with AutoCloseable {
+                    (implicit codec: Codec) extends Iterator[HtrcVolume] with AutoCloseable {
   import VolumeIterator._
 
+  @SuppressWarnings(Array("org.wartremover.warts.Var"))
   private var nextEntry = Option(zipStream.getNextEntry)
 
   override def hasNext: Boolean = nextEntry.isDefined
 
-  override def next(): HTRCVolume = nextEntry match {
+  @SuppressWarnings(Array(
+    "org.wartremover.warts.OptionPartial",
+    "org.wartremover.warts.TryPartial",
+    "org.wartremover.warts.Throw"
+  ))
+  override def next(): HtrcVolume = nextEntry match {
     case Some(zipEntry) if !zipEntry.getName.equals("ERROR.err") =>
       require(zipEntry.isDirectory)
       val cleanId = zipEntry.getName.init
@@ -39,10 +43,11 @@ class VolumeIterator(zipStream: ZipInputStream, closeF: ZipInputStream => Unit =
         .takeWhile(e => e.isDefined && !e.get.isDirectory && !e.get.getName.equals("ERROR.err"))
         .map(_.get)
         .map(readPage)
-        .toSeq
-        .sortBy(_.pageSeq)
+        .toIndexedSeq
+        .sortBy(_.seq)
 
-      new HTRCVolume(PairtreeHelper.getDocFromCleanId(cleanId), pages)
+      val volumeId = HtrcVolumeId.parseClean(cleanId).get
+      new HtrcVolume(volumeId, pages)
 
     case Some(_) =>
       val error = Source.fromInputStream(zipStream).mkString
@@ -53,8 +58,8 @@ class VolumeIterator(zipStream: ZipInputStream, closeF: ZipInputStream => Unit =
 
   def close(): Unit = closeF(zipStream)
 
-  private def readPage(entry: ZipEntry): Page = {
+  private def readPage(entry: ZipEntry): HtrcPage = {
     val pageSeqRegex(seq) = entry.getName
-    Page(zipStream, seq)
+    new HtrcPage(seq, zipStream)
   }
 }

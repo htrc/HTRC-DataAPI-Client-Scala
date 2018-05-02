@@ -122,6 +122,7 @@ object DataApiClient {
         useTempStorage = Some(tmpDir)
       )
 
+    @SuppressWarnings(Array("org.wartremover.warts.OptionPartial"))
     def build()(implicit ev: Options =:= RequiredOptions): DataApi =
       new DataApiClient(
         baseUrl = url.get,
@@ -136,6 +137,7 @@ object DataApiClient {
 
   def apply(): Builder[DefaultOptions] = new Builder
 
+  @SuppressWarnings(Array("org.wartremover.warts.Null"))
   private lazy val insecureSocketFactory: SSLSocketFactory = {
     val noopTrustManager = Array[TrustManager](new X509TrustManager() {
       override def checkServerTrusted(x509Certificates: Array[X509Certificate], s: String): Unit = {}
@@ -169,6 +171,11 @@ sealed class DataApiClient(baseUrl: String,
   if (!performSSLValidation)
     logger.warn("Disabling SSL validation! This is HIGHLY insecure and should NEVER be used in production!")
 
+  @SuppressWarnings(Array(
+    "org.wartremover.warts.OptionPartial",
+    "org.wartremover.warts.Throw",
+    "org.wartremover.warts.TryPartial"
+  ))
   def retrieveVolumes(ids: TraversableOnce[String])
                      (implicit codec: Codec, executionContext: ExecutionContext): Future[VolumeIterator] = Future {
     val url = new URL(apiUrl, "volumes")
