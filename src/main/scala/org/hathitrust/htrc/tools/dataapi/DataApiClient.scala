@@ -176,8 +176,8 @@ sealed class DataApiClient(baseUrl: String,
     "org.wartremover.warts.Throw",
     "org.wartremover.warts.TryPartial"
   ))
-  def retrieveVolumes(ids: TraversableOnce[String])
-                     (implicit codec: Codec, executionContext: ExecutionContext): Future[VolumeIterator] = Future {
+  override def retrieveVolumes(ids: TraversableOnce[String])
+                              (implicit codec: Codec, executionContext: ExecutionContext): Future[VolumeIterator] = Future {
     val url = new URL(apiUrl, "volumes")
 
     val conn = url.openConnection() match {
