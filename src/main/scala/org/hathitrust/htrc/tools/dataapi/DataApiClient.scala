@@ -216,18 +216,16 @@ sealed class DataApiClient(baseUrl: String,
               tmpDir, FileUtils.restrictedOwnerOnlyAccess(tmpDir)).get
             conn.disconnect()
             logger.debug(s"Response saved to $tmpPath")
-            val stream = Files.newInputStream(tmpPath)
-            VolumeIterator(new ZipInputStream(stream), zs => {
-              zs.close()
+            VolumeIterator(tmpPath.toFile).onClose {
               Try {
                 Files.delete(tmpPath)
                 logger.debug(s"Deleted temp response file: $tmpPath")
               }.recover {
                 case t => logger.error(s"Could not delete temp response file: $tmpPath", t)
               }
-            })
+            }
 
-          case None => VolumeIterator(new ZipInputStream(conn.getInputStream))
+          case None => VolumeIterator(new ZipInputStream(conn.getInputStream, codec.charSet))
         }
 
       case errCode =>
