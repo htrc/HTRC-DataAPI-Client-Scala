@@ -176,8 +176,8 @@ sealed class DataApiClient(baseUrl: String,
     "org.wartremover.warts.Throw",
     "org.wartremover.warts.TryPartial"
   ))
-  def retrieveVolumes(ids: TraversableOnce[String])
-                     (implicit codec: Codec, executionContext: ExecutionContext): Future[VolumeIterator] = Future {
+  override def retrieveVolumes(ids: TraversableOnce[String])
+                              (implicit codec: Codec, executionContext: ExecutionContext): Future[VolumeIterator] = Future {
     val url = new URL(apiUrl, "volumes")
 
     val conn = url.openConnection() match {
@@ -216,18 +216,16 @@ sealed class DataApiClient(baseUrl: String,
               tmpDir, FileUtils.restrictedOwnerOnlyAccess(tmpDir)).get
             conn.disconnect()
             logger.debug(s"Response saved to $tmpPath")
-            val stream = Files.newInputStream(tmpPath)
-            VolumeIterator(new ZipInputStream(stream), zs => {
-              zs.close()
+            VolumeIterator(tmpPath.toFile).onClose {
               Try {
                 Files.delete(tmpPath)
                 logger.debug(s"Deleted temp response file: $tmpPath")
               }.recover {
                 case t => logger.error(s"Could not delete temp response file: $tmpPath", t)
               }
-            })
+            }
 
-          case None => VolumeIterator(new ZipInputStream(conn.getInputStream))
+          case None => VolumeIterator(new ZipInputStream(conn.getInputStream, codec.charSet))
         }
 
       case errCode =>

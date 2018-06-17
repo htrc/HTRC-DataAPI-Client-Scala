@@ -27,7 +27,7 @@ lazy val commonSettings = Seq(
     else
       Some("HTRC Releases Repository"  at nexus + "content/repositories/releases")
   },
-  credentials += Credentials(Path.userHome / ".ivy2" / ".credentials"),
+  credentials += Credentials(Path.userHome / ".ivy2" / ".credentials" / "nexus.htrc.illinois.edu"),
   buildInfoOptions ++= Seq(BuildInfoOption.BuildTime),
   buildInfoPackage := "build",
   buildInfoKeys ++= Seq[BuildInfoKey](
