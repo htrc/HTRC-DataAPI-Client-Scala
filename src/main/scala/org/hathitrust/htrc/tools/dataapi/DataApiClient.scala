@@ -38,7 +38,8 @@ object DataApiClient {
                                             readTimeout: Int = 0,
                                             performSSLValidation: Boolean = true,
                                             followRedirects: Boolean = true,
-                                            useTempStorage: Option[String] = None) {
+                                            useTempStorage: Option[String] = None,
+                                            failOnError: Boolean = false) {
     import Builder.Options._
 
     def setApiUrl(url: String): Builder[Options with UrlOption] = {
@@ -49,7 +50,8 @@ object DataApiClient {
         readTimeout = readTimeout,
         performSSLValidation = performSSLValidation,
         followRedirects = followRedirects,
-        useTempStorage = useTempStorage
+        useTempStorage = useTempStorage,
+        failOnError = failOnError
       )
     }
 
@@ -61,7 +63,8 @@ object DataApiClient {
         readTimeout = readTimeout,
         performSSLValidation = performSSLValidation,
         followRedirects = followRedirects,
-        useTempStorage = useTempStorage
+        useTempStorage = useTempStorage,
+        failOnError = failOnError
       )
     }
 
@@ -73,7 +76,8 @@ object DataApiClient {
         readTimeout = readTimeout,
         performSSLValidation = performSSLValidation,
         followRedirects = followRedirects,
-        useTempStorage = useTempStorage
+        useTempStorage = useTempStorage,
+        failOnError = failOnError
       )
     }
 
@@ -85,7 +89,8 @@ object DataApiClient {
         readTimeout = timeout,
         performSSLValidation = performSSLValidation,
         followRedirects = followRedirects,
-        useTempStorage = useTempStorage
+        useTempStorage = useTempStorage,
+        failOnError = failOnError
       )
     }
 
@@ -97,7 +102,8 @@ object DataApiClient {
         readTimeout = readTimeout,
         performSSLValidation = false,
         followRedirects = followRedirects,
-        useTempStorage = useTempStorage
+        useTempStorage = useTempStorage,
+        failOnError = failOnError
       )
 
     def disableFollowRedirects(): Builder[Options] =
@@ -108,10 +114,11 @@ object DataApiClient {
         readTimeout = readTimeout,
         performSSLValidation = performSSLValidation,
         followRedirects = false,
-        useTempStorage = useTempStorage
+        useTempStorage = useTempStorage,
+        failOnError = failOnError
       )
 
-    def setUseTempStorage(tmpDir: String = FileUtils.OSTmpDir): Builder[Options] =
+    def setUseTempStorage(tmpDir: String = FileUtils.OSTmpDir, failOnError: Boolean = true): Builder[Options] =
       new Builder(
         url = url,
         token = token,
@@ -119,7 +126,8 @@ object DataApiClient {
         readTimeout = readTimeout,
         performSSLValidation = performSSLValidation,
         followRedirects = followRedirects,
-        useTempStorage = Some(tmpDir)
+        useTempStorage = Some(tmpDir),
+        failOnError = failOnError
       )
 
     @SuppressWarnings(Array("org.wartremover.warts.OptionPartial"))
@@ -131,7 +139,8 @@ object DataApiClient {
         readTimeout = readTimeout,
         performSSLValidation = performSSLValidation,
         followRedirects = followRedirects,
-        useTempStorage = useTempStorage
+        useTempStorage = useTempStorage,
+        failOnError = failOnError
       )
   }
 
@@ -159,7 +168,8 @@ sealed class DataApiClient(baseUrl: String,
                            readTimeout: Int,
                            performSSLValidation: Boolean,
                            followRedirects: Boolean,
-                           useTempStorage: Option[String]) extends DataApi {
+                           useTempStorage: Option[String],
+                           failOnError: Boolean) extends DataApi {
   import DataApiClient._
 
   require(baseUrl != null && baseUrl.startsWith("http"), s"Invalid URL: $baseUrl")
@@ -216,7 +226,7 @@ sealed class DataApiClient(baseUrl: String,
               tmpDir, FileUtils.restrictedOwnerOnlyAccess(tmpDir)).get
             conn.disconnect()
             logger.debug(s"Response saved to $tmpPath")
-            VolumeIterator(tmpPath.toFile).onClose {
+            VolumeIterator(tmpPath.toFile, failOnError).onClose {
               Try {
                 Files.delete(tmpPath)
                 logger.debug(s"Deleted temp response file: $tmpPath")
