@@ -82,6 +82,7 @@ class VolumeIterator(zipStream: ZipInputStream)
 
     case Some(zipEntry) if zipEntry.getName.equalsIgnoreCase("ERROR.err") =>
       val error = Source.fromInputStream(zipStream).mkString
+      nextEntry = Option(zipStream.getNextEntry)
       Right(DataApiError(error))
 
     case _ => throw new NoSuchElementException
