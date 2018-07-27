@@ -57,7 +57,7 @@ lazy val `dataapi-client` = (project in file("."))
     name := "dataapi-client",
     licenses += "Apache2" -> url("http://www.apache.org/licenses/LICENSE-2.0"),
     libraryDependencies ++= Seq(
-      "org.hathitrust.htrc"           %% "data-model"           % "1.2",
+      "org.hathitrust.htrc"           %% "data-model"           % "1.3.1",
       "ch.qos.logback"                %  "logback-classic"      % "1.2.3",
       "org.scalacheck"                %% "scalacheck"           % "1.14.0"      % Test,
       "org.scalatest"                 %% "scalatest"            % "3.0.5"       % Test
