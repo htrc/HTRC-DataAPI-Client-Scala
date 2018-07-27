@@ -2,7 +2,7 @@ package org.hathitrust.htrc.tools.dataapi
 
 import java.net.{HttpURLConnection, URL, URLEncoder}
 import java.nio.file._
-import java.security.cert.X509Certificate
+import java.security.KeyStore
 import java.util.zip.ZipInputStream
 
 import build.BuildInfo
@@ -10,6 +10,7 @@ import javax.net.ssl._
 import org.hathitrust.htrc.tools.dataapi.DataApiClient.Builder.Options.DefaultOptions
 import org.hathitrust.htrc.tools.dataapi.exceptions.{ApiRequestException, UnsupportedProtocolException}
 import org.hathitrust.htrc.tools.dataapi.utils.AutoCloseableResource._
+import org.hathitrust.htrc.tools.dataapi.utils.CryptoUtils._
 import org.hathitrust.htrc.tools.dataapi.utils.FileUtils
 import org.slf4j.{Logger, LoggerFactory}
 
@@ -37,6 +38,8 @@ object DataApiClient {
                                             connectTimeout: Int = 0,
                                             readTimeout: Int = 0,
                                             performSSLValidation: Boolean = true,
+                                            clientCertKeyStore: Option[KeyStore] = None,
+                                            clientCertKeyStorePwd: Option[String] = None,
                                             followRedirects: Boolean = true,
                                             useTempStorage: Option[String] = None,
                                             failOnError: Boolean = false) {
@@ -49,6 +52,8 @@ object DataApiClient {
         connectTimeout = connectTimeout,
         readTimeout = readTimeout,
         performSSLValidation = performSSLValidation,
+        clientCertKeyStore = clientCertKeyStore,
+        clientCertKeyStorePwd = clientCertKeyStorePwd,
         followRedirects = followRedirects,
         useTempStorage = useTempStorage,
         failOnError = failOnError
@@ -62,6 +67,8 @@ object DataApiClient {
         connectTimeout = connectTimeout,
         readTimeout = readTimeout,
         performSSLValidation = performSSLValidation,
+        clientCertKeyStore = clientCertKeyStore,
+        clientCertKeyStorePwd = clientCertKeyStorePwd,
         followRedirects = followRedirects,
         useTempStorage = useTempStorage,
         failOnError = failOnError
@@ -75,6 +82,8 @@ object DataApiClient {
         connectTimeout = timeout,
         readTimeout = readTimeout,
         performSSLValidation = performSSLValidation,
+        clientCertKeyStore = clientCertKeyStore,
+        clientCertKeyStorePwd = clientCertKeyStorePwd,
         followRedirects = followRedirects,
         useTempStorage = useTempStorage,
         failOnError = failOnError
@@ -88,6 +97,8 @@ object DataApiClient {
         connectTimeout = connectTimeout,
         readTimeout = timeout,
         performSSLValidation = performSSLValidation,
+        clientCertKeyStore = clientCertKeyStore,
+        clientCertKeyStorePwd = clientCertKeyStorePwd,
         followRedirects = followRedirects,
         useTempStorage = useTempStorage,
         failOnError = failOnError
@@ -101,6 +112,22 @@ object DataApiClient {
         connectTimeout = connectTimeout,
         readTimeout = readTimeout,
         performSSLValidation = false,
+        clientCertKeyStore = clientCertKeyStore,
+        clientCertKeyStorePwd = clientCertKeyStorePwd,
+        followRedirects = followRedirects,
+        useTempStorage = useTempStorage,
+        failOnError = failOnError
+      )
+
+    def useClientCertKeyStore(keyStore: KeyStore, keyStorePwd: String): Builder[Options] =
+      new Builder(
+        url = url,
+        token = token,
+        connectTimeout = connectTimeout,
+        readTimeout = readTimeout,
+        performSSLValidation = false,
+        clientCertKeyStore = Some(keyStore),
+        clientCertKeyStorePwd = Some(keyStorePwd),
         followRedirects = followRedirects,
         useTempStorage = useTempStorage,
         failOnError = failOnError
@@ -113,6 +140,8 @@ object DataApiClient {
         connectTimeout = connectTimeout,
         readTimeout = readTimeout,
         performSSLValidation = performSSLValidation,
+        clientCertKeyStore = clientCertKeyStore,
+        clientCertKeyStorePwd = clientCertKeyStorePwd,
         followRedirects = false,
         useTempStorage = useTempStorage,
         failOnError = failOnError
@@ -125,6 +154,8 @@ object DataApiClient {
         connectTimeout = connectTimeout,
         readTimeout = readTimeout,
         performSSLValidation = performSSLValidation,
+        clientCertKeyStore = clientCertKeyStore,
+        clientCertKeyStorePwd = clientCertKeyStorePwd,
         followRedirects = followRedirects,
         useTempStorage = Some(tmpDir),
         failOnError = failOnError
@@ -138,6 +169,8 @@ object DataApiClient {
         connectTimeout = connectTimeout,
         readTimeout = readTimeout,
         performSSLValidation = performSSLValidation,
+        clientCertKeyStore = clientCertKeyStore,
+        clientCertKeyStorePwd = clientCertKeyStorePwd,
         followRedirects = followRedirects,
         useTempStorage = useTempStorage,
         failOnError = failOnError
@@ -145,21 +178,6 @@ object DataApiClient {
   }
 
   def apply(): Builder[DefaultOptions] = new Builder
-
-  @SuppressWarnings(Array("org.wartremover.warts.Null"))
-  private lazy val insecureSocketFactory: SSLSocketFactory = {
-    val noopTrustManager = Array[TrustManager](new X509TrustManager() {
-      override def checkServerTrusted(x509Certificates: Array[X509Certificate], s: String): Unit = {}
-
-      override def checkClientTrusted(x509Certificates: Array[X509Certificate], s: String): Unit = {}
-
-      override def getAcceptedIssuers: Array[X509Certificate] = null
-    })
-
-    val sslContext = SSLContext.getInstance("SSL")
-    sslContext.init(null, noopTrustManager, null)
-    sslContext.getSocketFactory
-  }
 }
 
 sealed class DataApiClient(baseUrl: String,
@@ -167,6 +185,8 @@ sealed class DataApiClient(baseUrl: String,
                            connectTimeout: Int,
                            readTimeout: Int,
                            performSSLValidation: Boolean,
+                           clientCertKeyStore: Option[KeyStore],
+                           clientCertKeyStorePwd: Option[String],
                            followRedirects: Boolean,
                            useTempStorage: Option[String],
                            failOnError: Boolean) extends DataApi {
@@ -192,9 +212,16 @@ sealed class DataApiClient(baseUrl: String,
 
     val conn = url.openConnection() match {
       case https: HttpsURLConnection =>
-        if (!performSSLValidation) {
-          https.setSSLSocketFactory(insecureSocketFactory)
+        (clientCertKeyStore, clientCertKeyStorePwd) match {
+          case (Some(keyStore), Some(pwd)) =>
+            https.setSSLSocketFactory(getFactory(keyStore, pwd, performSSLValidation))
+
+          case _ =>
+            if (!performSSLValidation) {
+              https.setSSLSocketFactory(insecureSocketFactory)
+            }
         }
+
         https
       case http: HttpURLConnection => http
       case other => throw UnsupportedProtocolException(other.getClass.getName)
@@ -238,8 +265,15 @@ sealed class DataApiClient(baseUrl: String,
           case None => VolumeIterator(new ZipInputStream(conn.getInputStream, codec.charSet))
         }
 
+      case HttpURLConnection.HTTP_NOT_FOUND =>
+        throw ApiRequestException(HttpURLConnection.HTTP_NOT_FOUND, apiUrl.toString)
+
       case errCode =>
-        val message = Source.fromInputStream(conn.getErrorStream).mkString
+        val message =
+          Option(conn.getErrorStream)
+            .map(Source.fromInputStream(_).mkString)
+            .getOrElse("")
+
         throw ApiRequestException(errCode, message)
     }
   }
