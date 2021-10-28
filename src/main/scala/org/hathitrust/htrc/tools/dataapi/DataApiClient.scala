@@ -240,7 +240,7 @@ sealed class DataApiClient(baseUrl: String,
 
     val postData = "volumeIDs=" + ids.toIterator.map(URLEncoder.encode(_, codec.name)).mkString("|")
 
-    Using(conn.getOutputStream) { outputStream =>
+    Using.resource(conn.getOutputStream) { outputStream =>
       outputStream.write(postData.getBytes(codec.charSet))
     }
 

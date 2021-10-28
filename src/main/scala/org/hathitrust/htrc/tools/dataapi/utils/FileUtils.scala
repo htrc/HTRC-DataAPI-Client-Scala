@@ -42,7 +42,7 @@ object FileUtils {
     val tmpPath = Paths.get(tmpDir)
     val tmpFile = Files.createTempFile(tmpPath, prefix, suffix, fileAttributes: _*)
 
-    Using(Files.newOutputStream(tmpFile, StandardOpenOption.WRITE)) { tmpStream =>
+    Using.resource(Files.newOutputStream(tmpFile, StandardOpenOption.WRITE)) { tmpStream =>
       copy(is, tmpStream)
     }
 
