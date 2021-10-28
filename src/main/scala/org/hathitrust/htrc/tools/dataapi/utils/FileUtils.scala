@@ -3,10 +3,7 @@ package org.hathitrust.htrc.tools.dataapi.utils
 import java.io.{InputStream, OutputStream}
 import java.nio.file._
 import java.nio.file.attribute._
-
-import org.hathitrust.htrc.tools.dataapi.utils.AutoCloseableResource._
-
-import scala.util.Try
+import scala.util.{Try, Using}
 
 object FileUtils {
   val OSTmpDir: String = System.getProperty("java.io.tmpdir")
@@ -45,7 +42,7 @@ object FileUtils {
     val tmpPath = Paths.get(tmpDir)
     val tmpFile = Files.createTempFile(tmpPath, prefix, suffix, fileAttributes: _*)
 
-    using(Files.newOutputStream(tmpFile, StandardOpenOption.WRITE)) { tmpStream =>
+    Using(Files.newOutputStream(tmpFile, StandardOpenOption.WRITE)) { tmpStream =>
       copy(is, tmpStream)
     }
 
