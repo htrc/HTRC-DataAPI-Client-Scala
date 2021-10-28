@@ -9,14 +9,14 @@ import build.BuildInfo
 import javax.net.ssl._
 import org.hathitrust.htrc.tools.dataapi.DataApiClient.Builder.Options.DefaultOptions
 import org.hathitrust.htrc.tools.dataapi.exceptions.{ApiRequestException, UnsupportedProtocolException}
-import org.hathitrust.htrc.tools.dataapi.utils.AutoCloseableResource._
 import org.hathitrust.htrc.tools.dataapi.utils.CryptoUtils._
 import org.hathitrust.htrc.tools.dataapi.utils.FileUtils
 import org.slf4j.{Logger, LoggerFactory}
 
+import scala.collection.compat.IterableOnce
 import scala.concurrent.{ExecutionContext, Future}
 import scala.io.{Codec, Source}
-import scala.util.Try
+import scala.util.{Try, Using}
 
 object DataApiClient {
   private val logger: Logger = LoggerFactory.getLogger(getClass)
@@ -206,7 +206,7 @@ sealed class DataApiClient(baseUrl: String,
     "org.wartremover.warts.Throw",
     "org.wartremover.warts.TryPartial"
   ))
-  override def retrieveVolumes(ids: TraversableOnce[String])
+  override def retrieveVolumes(ids: IterableOnce[String])
                               (implicit codec: Codec, executionContext: ExecutionContext): Future[VolumeIterator] = Future {
     val url = new URL(apiUrl, "volumes")
 
@@ -238,9 +238,9 @@ sealed class DataApiClient(baseUrl: String,
     conn.setDoInput(true)
     conn.setDoOutput(true)
 
-    val postData = "volumeIDs=" + ids.map(URLEncoder.encode(_, codec.name)).mkString("|")
+    val postData = "volumeIDs=" + ids.toIterator.map(URLEncoder.encode(_, codec.name)).mkString("|")
 
-    using(conn.getOutputStream) { outputStream =>
+    Using(conn.getOutputStream) { outputStream =>
       outputStream.write(postData.getBytes(codec.charSet))
     }
 
