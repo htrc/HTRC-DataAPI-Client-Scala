@@ -24,14 +24,20 @@ lazy val commonSettings = Seq(
     ("Git-Version", git.gitDescribedVersion.value.getOrElse("N/A")),
     ("Git-Dirty", git.gitUncommittedChanges.value.toString),
     ("Build-Date", new java.util.Date().toString)
-  ),
+  )
+)
+
+lazy val wartRemoverSettings = Seq(
   Compile / compile / wartremoverErrors ++= Warts.unsafe.diff(Seq(
     Wart.DefaultArguments,
     Wart.NonUnitStatements,
     Wart.Any,
     Wart.TryPartial,
     Wart.StringPlusAny
-  )),
+  ))
+)
+
+lazy val publishSettings = Seq(
   publishTo := {
     val nexus = "https://nexus.htrc.illinois.edu/"
     if (isSnapshot.value)
@@ -77,6 +83,8 @@ lazy val ammoniteSettings = Seq(
 lazy val `dataapi-client` = (project in file("."))
   .enablePlugins(GitVersioning, GitBranchPrompt, BuildInfoPlugin)
   .settings(commonSettings)
+  .settings(wartRemoverSettings)
+  .settings(publishSettings)
   .settings(buildInfoSettings)
   .settings(ammoniteSettings)
   .settings(
